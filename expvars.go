@@ -38,6 +38,12 @@ type Var interface {
 	String() string
 }
 
+// MVar is an abstract type for all exported multi-value variables.
+type MVar interface {
+	// Strings returns a valid JSON values for the variable.
+	Strings() []string
+}
+
 // Int is a 64-bit integer variable that satisfies the Var interface.
 type Int struct {
 	i int64
@@ -130,7 +136,7 @@ var (
 // Publish declares a named exported variable. This should be called from a
 // package's init function when it creates its Vars. If the name is already
 // registered then this will log.Panic.
-func Publish(name string, v Var) {
+func Publish(name string, v interface{}) {
 	if _, dup := vars.LoadOrStore(name, v); dup {
 		log.Panicln("Reuse of exported var name:", name)
 	}
@@ -142,8 +148,8 @@ func Publish(name string, v Var) {
 
 // Get retrieves a named exported variable. It returns nil if the name has
 // not been registered.
-func Get(name string) Var {
+func Get(name string) interface{} {
 	i, _ := vars.Load(name)
-	v, _ := i.(Var)
-	return v
+
+	return i
 }

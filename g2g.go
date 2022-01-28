@@ -25,7 +25,7 @@ type Graphite struct {
 	connection    net.Conn
 	batchSize     int
 	batchBuf      *bytes.Buffer
-	vars          map[string]Var
+	vars          map[string]interface{}
 	registrations chan namedVar
 	shutdown      chan chan bool
 }
@@ -33,7 +33,7 @@ type Graphite struct {
 // A namedVar couples an expvar (interface) with an "external" name.
 type namedVar struct {
 	name string
-	v    Var
+	v    interface{}
 }
 
 // splitEndpoint splits the provided endpoint string into its network and address
@@ -72,7 +72,7 @@ func NewGraphiteBatch(endpoint string, interval, timeout time.Duration, batchSiz
 		interval:      interval,
 		timeout:       timeout,
 		connection:    nil,
-		vars:          map[string]Var{},
+		vars:          make(map[string]interface{}),
 		registrations: make(chan namedVar),
 		shutdown:      make(chan chan bool),
 	}
@@ -94,7 +94,7 @@ func NewGraphiteBatch(endpoint string, interval, timeout time.Duration, batchSiz
 // Register registers an expvar under the given name. (Roughly) every
 // interval, the current value of the given expvar will be published to
 // Graphite under the given name.
-func (g *Graphite) Register(name string, v Var) {
+func (g *Graphite) Register(name string, v interface{}) {
 	g.registrations <- namedVar{name, v}
 }
 
@@ -154,16 +154,27 @@ func (g *Graphite) postAll() {
 
 	if g.batchSize > 0 {
 		g.batchBuf.Reset()
-		for name, v := range g.vars {
-			g.bufOne(name, v.String())
+		for name, i := range g.vars {
+			if mv, multiValue := i.(MVar); multiValue {
+				for _, v := range mv.Strings() {
+					g.bufOne(name, v)
+				}
+			} else if v, ok := i.(Var); ok {
+				g.bufOne(name, v.String())
+			}
+
 			if g.batchBuf.Len() >= g.batchSize {
 				if n, err := g.flushBuf(); err != nil {
 					g.connection = nil
 					log.Printf("g2g: write: %s", err)
+					break
 				} else if n != g.batchBuf.Len() {
 					g.connection = nil
 					log.Printf("g2g: short write: %d/%d", n, g.batchBuf.Len())
+					break
 				}
+
+				g.batchBuf.Reset()
 			}
 		}
 
@@ -175,9 +186,17 @@ func (g *Graphite) postAll() {
 			log.Printf("g2g: short write: %d/%d", n, g.batchBuf.Len())
 		}
 	} else {
-		for name, v := range g.vars {
-			if err := g.postOne(name, v.String()); err != nil {
-				log.Printf("g2g: %s: %s", name, err)
+		for name, i := range g.vars {
+			if mv, multiValue := i.(MVar); multiValue {
+				for _, v := range mv.Strings() {
+					if err := g.postOne(name, v); err != nil {
+						log.Printf("g2g: %s: %s", name, err)
+					}
+				}
+			} else if v, ok := i.(Var); ok {
+				if err := g.postOne(name, v.String()); err != nil {
+					log.Printf("g2g: %s: %s", name, err)
+				}
 			}
 		}
 	}
