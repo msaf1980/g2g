@@ -18,22 +18,30 @@ const (
 // in this struct, which will be published to the server on a
 // regular interval.
 type Graphite struct {
-	network       string
-	endpoint      string
-	interval      time.Duration
-	timeout       time.Duration
-	connection    net.Conn
-	batchSize     int
-	batchBuf      *bytes.Buffer
-	vars          map[string]Var
-	registrations chan namedVar
-	shutdown      chan chan bool
+	network        string
+	endpoint       string
+	interval       time.Duration
+	timeout        time.Duration
+	connection     net.Conn
+	batchSize      int
+	batchBuf       *bytes.Buffer
+	vars           map[string]Var
+	mvars          map[string]MVar
+	registrations  chan namedVar
+	mregistrations chan namedMVar
+	shutdown       chan chan bool
 }
 
 // A namedVar couples an expvar (interface) with an "external" name.
 type namedVar struct {
 	name string
 	v    Var
+}
+
+// A mnamedVar couples an expvar (interface) with an "external" name.
+type namedMVar struct {
+	name string
+	v    MVar
 }
 
 // splitEndpoint splits the provided endpoint string into its network and address
@@ -67,14 +75,16 @@ func NewGraphite(endpoint string, interval, timeout time.Duration) *Graphite {
 func NewGraphiteBatch(endpoint string, interval, timeout time.Duration, batchSize int) *Graphite {
 	network, endpoint := splitEndpoint(endpoint)
 	g := &Graphite{
-		network:       network,
-		endpoint:      endpoint,
-		interval:      interval,
-		timeout:       timeout,
-		connection:    nil,
-		vars:          map[string]Var{},
-		registrations: make(chan namedVar),
-		shutdown:      make(chan chan bool),
+		network:        network,
+		endpoint:       endpoint,
+		interval:       interval,
+		timeout:        timeout,
+		connection:     nil,
+		vars:           map[string]Var{},
+		mvars:          map[string]MVar{},
+		registrations:  make(chan namedVar),
+		mregistrations: make(chan namedMVar),
+		shutdown:       make(chan chan bool),
 	}
 	if batchSize > 1 {
 		if batchSize < 512 {
@@ -98,6 +108,13 @@ func (g *Graphite) Register(name string, v Var) {
 	g.registrations <- namedVar{name, v}
 }
 
+// MRegister registers an multi-alue expvar under the given name. (Roughly) every
+// interval, the current value of the given expvar will be published to
+// Graphite under the given name.
+func (g *Graphite) MRegister(name string, v MVar) {
+	g.mregistrations <- namedMVar{name, v}
+}
+
 // Shutdown signals the Graphite structure to stop publishing
 // Registered expvars.
 func (g *Graphite) Shutdown() {
@@ -113,6 +130,8 @@ func (g *Graphite) loop() {
 		select {
 		case nv := <-g.registrations:
 			g.vars[nv.name] = nv.v
+		case nv := <-g.mregistrations:
+			g.mvars[nv.name] = nv.v
 		case <-ticker.C:
 			g.postAll()
 		case q := <-g.shutdown:
@@ -127,28 +146,32 @@ func (g *Graphite) loop() {
 }
 
 func (g *Graphite) flushBuf() (int, error) {
-	if g.connection == nil {
-		if err := g.reconnect(); err != nil {
-			return 0, err
+	if g.batchBuf.Len() > 0 {
+		if g.connection == nil {
+			if err := g.reconnect(); err != nil {
+				return 0, err
+			}
 		}
-	}
-	n, err := g.connection.Write(g.batchBuf.Bytes())
-	if err != nil {
-		// retry
-		g.connection = nil
-		time.Sleep(time.Second)
-		if err := g.reconnect(); err != nil {
-			return 0, err
+		n, err := g.connection.Write(g.batchBuf.Bytes())
+		if err != nil {
+			// retry
+			g.connection = nil
+			time.Sleep(time.Second)
+			if err := g.reconnect(); err != nil {
+				return 0, err
+			}
+			n, err = g.connection.Write(g.batchBuf.Bytes())
 		}
-		n, err = g.connection.Write(g.batchBuf.Bytes())
-	}
 
-	return n, err
+		return n, err
+	} else {
+		return 0, nil
+	}
 }
 
 // postAll publishes all Registered expvars to the Graphite server.
 func (g *Graphite) postAll() {
-	if len(g.vars) == 0 {
+	if len(g.vars) == 0 && len(g.mvars) == 0 {
 		return
 	}
 
@@ -156,6 +179,20 @@ func (g *Graphite) postAll() {
 		g.batchBuf.Reset()
 		for name, v := range g.vars {
 			g.bufOne(name, v.String())
+			if g.batchBuf.Len() >= g.batchSize {
+				if n, err := g.flushBuf(); err != nil {
+					g.connection = nil
+					log.Printf("g2g: write: %s", err)
+				} else if n != g.batchBuf.Len() {
+					g.connection = nil
+					log.Printf("g2g: short write: %d/%d", n, g.batchBuf.Len())
+				}
+			}
+		}
+		for name, mv := range g.mvars {
+			for _, v := range mv.Strings() {
+				g.bufOne(name+"."+v.Name, v.V)
+			}
 			if g.batchBuf.Len() >= g.batchSize {
 				if n, err := g.flushBuf(); err != nil {
 					g.connection = nil
@@ -180,11 +217,17 @@ func (g *Graphite) postAll() {
 				log.Printf("g2g: %s: %s", name, err)
 			}
 		}
+		for name, mv := range g.mvars {
+			for _, v := range mv.Strings() {
+				if err := g.postOne(name+"."+v.Name, v.V); err != nil {
+					log.Printf("g2g: %s: %s", name, err)
+				}
+			}
+		}
 	}
 }
 
-// postOne publishes the given name-value pair to the Graphite server.
-// If the connection is broken, one reconnect attempt is made.
+// bufOne store the given name-value pair in send buffer.
 func (g *Graphite) bufOne(name, value string) {
 	g.batchBuf.WriteString(name)
 	g.batchBuf.WriteString(" ")
