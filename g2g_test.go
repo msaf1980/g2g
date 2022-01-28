@@ -7,9 +7,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/msaf1980/g2g/pkg/expvars"
 )
 
-var testExpvar = NewInt("i")
+var testExpvar = expvars.NewInt("i")
 
 func TestPublish(t *testing.T) {
 	testPub(t, "localhost:2003", NewMockGraphite(t, "tcp://:2003"))

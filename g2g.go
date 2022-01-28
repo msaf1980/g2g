@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/msaf1980/g2g/pkg/expvars"
 )
 
 const (
@@ -25,8 +27,8 @@ type Graphite struct {
 	connection     net.Conn
 	batchSize      int
 	batchBuf       *bytes.Buffer
-	vars           map[string]Var
-	mvars          map[string]MVar
+	vars           map[string]expvars.Var
+	mvars          map[string]expvars.MVar
 	registrations  chan namedVar
 	mregistrations chan namedMVar
 	shutdown       chan chan bool
@@ -35,13 +37,13 @@ type Graphite struct {
 // A namedVar couples an expvar (interface) with an "external" name.
 type namedVar struct {
 	name string
-	v    Var
+	v    expvars.Var
 }
 
 // A mnamedVar couples an expvar (interface) with an "external" name.
 type namedMVar struct {
 	name string
-	v    MVar
+	v    expvars.MVar
 }
 
 // splitEndpoint splits the provided endpoint string into its network and address
@@ -80,8 +82,8 @@ func NewGraphiteBatch(endpoint string, interval, timeout time.Duration, batchSiz
 		interval:       interval,
 		timeout:        timeout,
 		connection:     nil,
-		vars:           map[string]Var{},
-		mvars:          map[string]MVar{},
+		vars:           map[string]expvars.Var{},
+		mvars:          map[string]expvars.MVar{},
 		registrations:  make(chan namedVar),
 		mregistrations: make(chan namedMVar),
 		shutdown:       make(chan chan bool),
@@ -104,14 +106,14 @@ func NewGraphiteBatch(endpoint string, interval, timeout time.Duration, batchSiz
 // Register registers an expvar under the given name. (Roughly) every
 // interval, the current value of the given expvar will be published to
 // Graphite under the given name.
-func (g *Graphite) Register(name string, v Var) {
+func (g *Graphite) Register(name string, v expvars.Var) {
 	g.registrations <- namedVar{name, v}
 }
 
 // MRegister registers an multi-alue expvar under the given name. (Roughly) every
 // interval, the current value of the given expvar will be published to
 // Graphite under the given name.
-func (g *Graphite) MRegister(name string, v MVar) {
+func (g *Graphite) MRegister(name string, v expvars.MVar) {
 	g.mregistrations <- namedMVar{name, v}
 }
 

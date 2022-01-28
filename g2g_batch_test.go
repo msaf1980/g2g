@@ -3,9 +3,11 @@ package g2g
 import (
 	"testing"
 	"time"
+
+	"github.com/msaf1980/g2g/pkg/expvars"
 )
 
-var testExpvar2 = NewInt("j")
+var testExpvar2 = expvars.NewInt("j")
 
 func TestPublishBatch(t *testing.T) {
 	testPubBatch(t, "localhost:2003", NewMockGraphite(t, "tcp://:2003"))

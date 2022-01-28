@@ -3,13 +3,15 @@ package g2g
 import (
 	"testing"
 	"time"
+
+	"github.com/msaf1980/g2g/pkg/expvars"
 )
 
 type loopSlice struct {
 }
 
-func (v *loopSlice) Strings() []MValue {
-	return []MValue{
+func (v *loopSlice) Strings() []expvars.MValue {
+	return []expvars.MValue{
 		{Name: "min", V: "1"},
 		{Name: "max", V: "2"},
 	}

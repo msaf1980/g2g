@@ -19,7 +19,7 @@ one.) For example,
 
 ```go
 var (
-	loadedRecords = g2g.NewInt("records loaded into the player")
+	loadedRecords = expvars.NewInt("records loaded into the player")
 )
 
 func LoadThemAll() {
