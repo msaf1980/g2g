@@ -76,10 +76,10 @@ func (v *Int) Set(value int64) {
 	atomic.StoreInt64(&v.i, value)
 }
 
-// roundFloat will attempt to parse the passed string as a float.
+// RoundFloat will attempt to parse the passed string as a float.
 // If it succeeds, it will return the same float, rounded at n decimal places.
 // If it fails, it will return the original string.
-func roundFloat(v float64) string {
+func RoundFloat(v float64) string {
 	if float64(int64(v)) == v {
 		return strconv.FormatInt(int64(v), 10)
 	}
@@ -110,7 +110,7 @@ func (v *Float) Value() float64 {
 
 func (v *Float) String() string {
 	f := math.Float64frombits(atomic.LoadUint64(&v.f))
-	return roundFloat(f)
+	return RoundFloat(f)
 }
 
 // Add adds delta to v.

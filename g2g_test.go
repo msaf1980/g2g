@@ -3,7 +3,6 @@ package g2g
 import (
 	"io"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -55,29 +54,6 @@ func testPub(t *testing.T, address string, mock *MockGraphite) {
 		t.Errorf("timeout during shutdown")
 	}
 
-}
-
-func TestRoundFloat(t *testing.T) {
-	m := map[float64]string{
-		0.00:  "0",
-		123.0: "123",
-		1.2:   "1.2",
-
-		1.00:        "1",
-		1.001:       "1.001",
-		1.00000001:  "1.00000001",
-		0.00001:     "0.00001",
-		0.01000:     "0.01",
-		0.01999:     "0.01999",
-		-1.234:      "-1.234",
-		123.456:     "123.456",
-		99999.09123: "99999.09123",
-	}
-	for v, expected := range m {
-		if got := roundFloat(v); got != expected {
-			t.Errorf("%s: got %s, expected %s", strconv.FormatFloat(v, 'g', -1, 64), got, expected)
-		}
-	}
 }
 
 //
