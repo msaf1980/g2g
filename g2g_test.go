@@ -1,15 +1,16 @@
 package g2g
 
 import (
-	"expvar"
+	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-var testExpvar = expvar.NewInt("i")
+var testExpvar = NewInt("i")
 
 func TestPublish(t *testing.T) {
 	testPub(t, "localhost:2003", NewMockGraphite(t, "tcp://:2003"))
@@ -26,19 +27,19 @@ func testPub(t *testing.T, address string, mock *MockGraphite) {
 	testExpvar.Set(34)
 	g.Register("test.foo.i", testExpvar)
 
-	time.Sleep(2 * d)
+	time.Sleep(2*d + d/10)
 	count := mock.Count()
-	if !(0 < count && count <= 2) {
-		t.Errorf("expected 0 < publishes <= 2, got %d", count)
+	if count < 1 || count > 2 {
+		t.Errorf("expected 1 <= count <= 2, got %d", count)
 	}
-	t.Logf("after %s, count=%d", 2*d, count)
+	// t.Logf("after %s, count=%d", 2*d, count)
 
-	time.Sleep(2 * d)
+	time.Sleep(2*d + d/10)
 	count = mock.Count()
-	if !(1 < count && count <= 4) {
-		t.Errorf("expected 1 < publishes <= 4, got %d", count)
+	if count < 3 || count > 4 {
+		t.Errorf("expected 3 <= count <= 4, got %d", count)
 	}
-	t.Logf("after second %s, count=%d", 2*d, count)
+	// t.Logf("after second %s, count=%d", 2*d, count)
 
 	// teardown
 	ok := make(chan bool)
@@ -57,25 +58,24 @@ func testPub(t *testing.T, address string, mock *MockGraphite) {
 }
 
 func TestRoundFloat(t *testing.T) {
-	m := map[string]string{
-		"abc":   "abc",
-		"0.00.": "0.00.",
-		"123":   "123",
-		"1.2.3": "1.2.3",
+	m := map[float64]string{
+		0.00:  "0",
+		123.0: "123",
+		1.2:   "1.2",
 
-		"1.00":        "1.00",
-		"1.001":       "1.00",
-		"1.00000001":  "1.00",
-		"0.00001":     "0.00",
-		"0.01000":     "0.01",
-		"0.01999":     "0.02",
-		"-1.234":      "-1.23",
-		"123.456":     "123.46",
-		"99999.09123": "99999.09",
+		1.00:        "1",
+		1.001:       "1.001",
+		1.00000001:  "1.00000001",
+		0.00001:     "0.00001",
+		0.01000:     "0.01",
+		0.01999:     "0.01999",
+		-1.234:      "-1.234",
+		123.456:     "123.456",
+		99999.09123: "99999.09123",
 	}
-	for s, expected := range m {
-		if got := roundFloat(s, 2); got != expected {
-			t.Errorf("%s: got %s, expected %s", s, got, expected)
+	for v, expected := range m {
+		if got := roundFloat(v); got != expected {
+			t.Errorf("%s: got %s, expected %s", strconv.FormatFloat(v, 'g', -1, 64), got, expected)
 		}
 	}
 }
@@ -143,6 +143,9 @@ func (m *MockGraphite) handle(conn net.Conn) {
 	for {
 		n, err := conn.Read(b)
 		if err != nil {
+			if err == io.EOF {
+				return
+			}
 			m.t.Logf("Mock Graphite: read error: %s", err)
 			return
 		}
@@ -150,10 +153,12 @@ func (m *MockGraphite) handle(conn net.Conn) {
 			m.t.Errorf("Mock Graphite: read %dB: too much data", n)
 			return
 		}
-		s := strings.TrimSpace(string(b[:n]))
-		m.t.Logf("Mock Graphite: read %dB: %s", n, s)
+		s := string(b[:n])
+		count := strings.Count(s, "\n")
+		s = strings.TrimSpace(s)
+		m.t.Logf("Mock Graphite: read %dB/%dM: %s", n, count, s)
 		m.mtx.Lock()
-		m.count++
+		m.count += count
 		m.mtx.Unlock()
 	}
 }
