@@ -38,6 +38,17 @@ type Var interface {
 	String() string
 }
 
+type MValue struct {
+	Name string
+	V    string
+}
+
+// MVar is an abstract type for all exported multi-values variables.
+type MVar interface {
+	// Strings returns a values for the variable.
+	Strings() []MValue
+}
+
 // Int is a 64-bit integer variable that satisfies the Var interface.
 type Int struct {
 	i int64
@@ -123,6 +134,7 @@ func (v *Float) Set(value float64) {
 // All published variables.
 var (
 	vars      sync.Map // map[string]Var
+	mvars     sync.Map // map[string]MVar
 	varKeysMu sync.RWMutex
 	varKeys   []string // sorted
 )
@@ -145,5 +157,26 @@ func Publish(name string, v Var) {
 func Get(name string) Var {
 	i, _ := vars.Load(name)
 	v, _ := i.(Var)
+	return v
+}
+
+// MPublish declares a named exported multi-variable. This should be called from a
+// package's init function when it creates its Vars. If the name is already
+// registered then this will log.Panic.
+func MPublish(name string, v MVar) {
+	if _, dup := vars.LoadOrStore(name, v); dup {
+		log.Panicln("Reuse of exported var name:", name)
+	}
+	varKeysMu.Lock()
+	defer varKeysMu.Unlock()
+	varKeys = append(varKeys, name)
+	sort.Strings(varKeys)
+}
+
+// MGet retrieves a named exported multi-variable. It returns nil if the name has
+// not been registered.
+func MGet(name string) MVar {
+	i, _ := mvars.Load(name)
+	v, _ := i.(MVar)
 	return v
 }
