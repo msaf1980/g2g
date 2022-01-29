@@ -194,7 +194,7 @@ func (g *Graphite) postAll() {
 		}
 		for name, mv := range g.mvars {
 			for _, v := range mv.Strings() {
-				g.bufOne(name+"."+v.Name, v.V)
+				g.bufOne(name+v.Name, v.V)
 			}
 			if g.batchBuf.Len() >= g.batchSize {
 				if n, err := g.flushBuf(); err != nil {
@@ -223,7 +223,7 @@ func (g *Graphite) postAll() {
 		}
 		for name, mv := range g.mvars {
 			for _, v := range mv.Strings() {
-				if err := g.postOne(name+"."+v.Name, v.V); err != nil {
+				if err := g.postOne(name+v.Name, v.V); err != nil {
 					log.Printf("g2g: %s: %s", name, err)
 				}
 			}
