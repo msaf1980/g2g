@@ -189,6 +189,7 @@ func (g *Graphite) postAll() {
 					g.connection = nil
 					log.Printf("g2g: short write: %d/%d", n, g.batchBuf.Len())
 				}
+				g.batchBuf.Reset()
 			}
 		}
 		for name, mv := range g.mvars {
@@ -203,6 +204,7 @@ func (g *Graphite) postAll() {
 					g.connection = nil
 					log.Printf("g2g: short write: %d/%d", n, g.batchBuf.Len())
 				}
+				g.batchBuf.Reset()
 			}
 		}
 
