@@ -76,6 +76,16 @@ func (v *Int) Set(value int64) {
 	atomic.StoreInt64(&v.i, value)
 }
 
+func RoundUp(v float64, prec int) float64 {
+	a := math.Abs(v)
+
+	if a > 1000000 {
+		return math.Round(v)
+	}
+
+	return math.Round(v*1000000.0) / 1000000.0
+}
+
 // RoundFloat will attempt to parse the passed string as a float.
 // If it succeeds, it will return the same float, rounded at n decimal places.
 // If it fails, it will return the original string.
@@ -90,7 +100,9 @@ func RoundFloat(v float64) string {
 	// 	return strconv.FormatFloat(v, 'f', 2, 64)
 	// }
 
-	return strconv.FormatFloat(v, 'f', -1, 64)
+	rv := RoundUp(v, 6)
+
+	return strconv.FormatFloat(rv, 'f', -1, 64)
 }
 
 // Float is a 64-bit float variable that satisfies the Var interface.
